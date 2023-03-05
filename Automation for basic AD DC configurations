@@ -1,0 +1,224 @@
+$Chosen = ""
+
+while ($Chosen -ne "exit")
+{
+
+echo "welcome to the server automation of installition and configuration"
+echo "please follow the instructions and look at your options to make sure everything is as it shuold"
+
+echo "Bedore everything, Have you done the Post installlition actions?
+if you haven't done it please type 0
+
+these are Your options :
+0. Configure IP, Disable Firewall and change Full qualified name
+If its your first time Type 0 to turn off the firewall and changing the Full Qualiefied name.
+!!! NOTIC !!!
+The computer will restart and the Powershell will wait for it to finish and will come back up.
+1. install / configure Active Directory to the server.
+2. install / configure DNS.
+3. install / configure DHCP.
+4. Create a Parent OU with 3 child OU's (Computers, Groups and Users)
+
+Note!! there are some operations that require a restart."
+
+    switch ($choice = Read-Host "what do you want to do ?")
+    {
+    0 {
+    "Disable Firewall and then give the computer a name * DONT FORGET TO RESTART AFTER THE NAME CHANGING "
+    $computerName = Read-Host "Choose the new computer name"
+		Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
+        Rename-Computer -NewName $computerName
+        Restart-Computer -Force
+
+    }
+    1 {
+        "1"
+
+	# Install the AD DS role
+	Install-WindowsFeature AD-Domain-Services -IncludeManagementTools
+
+        Write-Output "!!! NOTIC !!! 
+        The computer will restart and will come back to the powershell after the installation ."
+        $readAD_DC_Name = Read-Host "What is the Domain name (Up to 15 characters.)?"
+        Install-ADDSForest -CreateDnsDelegation:$false -DatabasePath "C:\Windows\NTDS" -DomainMode "Win2012R2" -DomainName "$readAD_DC_Name.com" -DomainNetbiosName "$readAD_DC_Name" -ForestMode "Win2012R2" -InstallDns:$true -LogPath "C:\Windows\NTDS" -NoRebootOnCompletion:$false -SysvolPath "C:\Windows\SYSVOL" -Force:$true
+
+    
+    }
+    2 {
+    "2"
+
+        $readDNSName = Read-Host "what would you like the server to be called ? (.com will be added automaticlly)"
+        $dnsServer = "$readDNSName.(Get-ADDomain).Name.com"
+        $zoneName = "$readDNSName.com"
+
+        # Install the DNS server role if it's not already installed
+        Install-WindowsFeature -Name DNS -IncludeManagementTools
+
+        # Start the DNS server service
+        Start-Service -Name DNS
+	
+	
+	# Create a new forward lookup zone
+    $NetIP_address = Read-Host "Type the NETID. (e.g. 192.168.X.0 the end shuld be the very start of an ip)"
+	Add-DnsServerPrimaryZone -Name $zoneName -ReplicationScope Forest
+    
+                   $NetOctets = $NetIP_address.Split('.')
+                   $NetPtrName = $NetOctets[3] + '.' + $NetOctets[2] + '.' + $NetOctets[1] + '.' + $NetOctets[0] + '.in-addr.arpa'
+
+	Add-DnsServerPrimaryZone -NetworkID $NetIP_address/24 -ZoneFile "$NetPtrName" -DynamicUpdate None -PassThru
+
+		$addToDNS = Read-Host "Type yes if you want to add a record to the DNS server."
+
+        if ($addToDNS -eq "yes")
+            {
+            echo "Type 1. for 'A' record"
+            echo "Type 2. for MX record"
+            $addToDNS_Option = Read-Host "What type of record would you like?"
+            $recordName = Read-Host "And how would you want to call the record? (e.g. 'www' / 'ns1' / 'mail')"
+            switch ($addToDNS_Option)
+                {
+                1 {$recordIP_Address = Read-Host "Type the ip number"
+                   $octets = $recordIP_Address.Split('.')
+                   $ptrName = $octets[3] + '.' + $octets[2] + '.' + $octets[1] + '.' + $octets[0] + '.in-addr.arpa'
+                   Add-DnsServerResourceRecordA -Name "$recordName" -IPv4Address $recordIP_Address -ZoneName $ZoneName
+                   Add-DnsServerResourceRecordPtr -Name $ptrName -PtrDomainName $recordName.com -ZoneName $ZoneName}
+                2 {Add-DnsServerResourceRecordMX -Name "$recordName" -MailExchange $recordName.$domainName.com -Preference 10 -ZoneName $ZoneName}
+                }
+            }    	
+        else {"You Skipped"}
+	
+    }
+    3 {
+    "3"
+        $DHCP_Server_Answer = Read-Host "To pick a DHCP server name Type 'Yes', unless it will take the default (the default will be dhcpserver.<servername>.com).
+        IT IS RECOMNDED TO USE THE CURRENT DOMAIN"
+        
+        if 
+            ($DHCP_Server_Answer -eq "yes") 
+            {
+            Write-Output "You entered 'Yes'"
+            Write-Output "The default DHCP server name is $dhcpServer "
+            $dhcpServer = Read-Host "Type the name of the DHCP server name." 
+            }
+        else 
+            {
+            $dhcpServer = (Get-ADDomain).InfrastructureMaster
+            Write-Output "The DHCP server name is $dhcpServer "
+            }
+        ##################################### NEXT #####################################
+            Write-Output "The subnet mask is /24 by default (255.255.255.0)"
+            $subnet_Answer = Read-Host "Do you want to change the subnet mask? Type yes to change."
+            
+        if 
+            ($subnet_Answer -eq "yes") 
+            {
+            Write-Output "Please Type in the following format NNN.NNN.NNN.NNN - N=Number"
+			$subnetMask = Read-Host "Type your subnet mask according the format above"
+            }
+        else {
+            Write-Output "The subnet mask is /24 by default (255.255.255.0)"
+            $subnetMask = "255.255.255.0"
+            }
+        ##################################### NEXT #####################################
+            Write-Output "the Default start range is 192.168.1.2"
+            $start_Range_Answer = Read-Host "Do you want to change the DHCP start range? Type yes to change."
+        if
+            ($start_Range_Answer -eq "yes")
+            {
+            $startRange = Read-Host "Type the start range in the following format NNN.NNN.NNN.NNN - N=Number"
+            Write-Output "the Default start range is 192.168.1.2"
+            }
+        else 
+            {Write-Output "the Default start range is 192.168.1.2"
+            $startRange = "192.168.1.2"
+            }
+        ##################################### NEXT #####################################
+        Write-Output "the Default end range is 192.168.1.253"
+        $end_Range_Answer = Read-Host "Do you want to change the DHCP end range? Type yes to change."
+        if
+            ($end_Range_Answer -eq "yes")
+            {$endRange = Read-Host "Type the end range in the following format NNN.NNN.NNN.NNN - N=Number"
+            }
+        else
+            {Write-Output "the Default end range is 192.168.1.253"
+            $endRange = "192.168.1.253"
+            }
+        ##################################### NEXT #####################################
+        Write-Output "the Default lease duration is 8.00:00:00"
+        $leaseDurationAnswer = Read-Host "Do you want to change the lease duration? Type yes to change."
+        if
+            ($leaseDurationAnswer -eq "yes")
+            {Write-Host "Type the lease duration in the following format DD.HH:MM:SS - DD=Days, HH=Hours, MM=Minutes, SS=Secondes"
+				$leaseDuration = Read-Host "Type the lease duration according to the format above"
+            }
+        else
+            {Write-Output "the Default lease duration is 8.00:00:00"
+				$leaseDuration = "8.00:00:00"
+            }
+        ##################################### NEXT #####################################
+        Write-Output "Your default scope name will be called Scope1"
+        $scopeNameAnswer = Read-Host "Do you want to change the DHCP scope name? Type yes to change."
+        if
+            ($scopeNameAnswer -eq "yes")
+            {$scopeName = Read-Host "Type the scope name you would like to use, the default is Scope1"
+            }
+        else 
+            {Write-Output "Your scope name will be called Scope1" 
+				$scopeName = "Scope1"
+            }
+        # Install the DHCP server role if it's not already installed
+        Install-WindowsFeature -Name DHCP -IncludeManagementTools
+
+        # Start the DHCP server service
+        Start-Service -Name DHCPServer
+
+        # Authorize the DHCP server in AD DS
+        Add-DhcpServerInDC -IPAddress (Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias Ethernet0 | Select-Object -ExpandProperty IPAddress)
+
+        # Create a new scope
+        Add-DhcpServerv4Scope -Name $scopeName -StartRange $startRange -EndRange $endRange -SubnetMask $subnetMask -LeaseDuration $leaseDuration
+
+        # Activate the new scope
+        Set-DhcpServerv4Scope -ScopeId $startRange -State Active 
+    }
+    4 {"4"
+        $mainPath = (Get-ADDomain).DistinguishedName
+        $newUnit = Read-Host "Type a new Unit to add for the active directory ."
+
+        $numOfUsers = Read-Host "How many users would you like to have ?"
+        $nameOfUsers = Read-Host "What name would you like to give them ? e.g. name1, name2, name3"
+
+        New-ADOrganizationalUnit -Name $newUnit
+
+        # Creating the new Organization Units and users Unit for the input unit
+
+        New-ADOrganizationalUnit -Name "Users" -Path "OU=$newUnit, $mainPath"
+        New-ADOrganizationalUnit -Name "Groups" -Path "OU=$newUnit, $mainPath"
+        New-ADOrganizationalUnit -Name "computers" -Path "OU=$newUnit, $mainPath"
+
+        New-ADGroup -GroupScope Global -Name $newUnit -Path "OU=Groups, OU=$newUnit, $mainPath"
+
+        $password = Read-Host "What is the basic password you want to your users?"
+        $password = ConvertTo-SecureString $password -AsPlainText -Force  #
+        for ($i=1; $i -le $numOfUsers; $i++) 
+        {
+        New-ADUser -Name $nameOfUsers$i -SamAccountName $nameOfUsers$i -UserPrincipalName $nameOfUsers$i -Path "OU=Users, OU=$newUnit, $mainPath" -Enabled $true -AccountPassword $password -ChangePasswordAtLogon:$true
+        #New-ADUser -Name $nameOfUsers$i -Path "OU=Users, OU=$newUnit, $mainPath"# Working for sure without password or enabled
+        }
+    
+}
+    default { Write-Output "You need to choose from the list above."}
+    }
+
+
+
+$Chosen = read-host 'to exit Type "exit", to continue type anything else. ?'
+
+}  
+   
+
+
+
+
+
+###########################################################################################################################################################
