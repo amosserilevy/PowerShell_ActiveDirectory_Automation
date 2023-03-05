@@ -10,10 +10,10 @@ echo "Bedore everything, Have you done the Post installlition actions?
 if you haven't done it please type 0
 
 these are Your options :
-0. Configure IP, Disable Firewall and change Full qualified name
+0. Disable Firewall and change Full qualified name (dont forget to configure the IP address manually if its necessary)
 If its your first time Type 0 to turn off the firewall and changing the Full Qualiefied name.
 !!! NOTIC !!!
-The computer will restart and the Powershell will wait for it to finish and will come back up.
+The computer will restart at the end.
 1. install / configure Active Directory to the server.
 2. install / configure DNS.
 3. install / configure DHCP.
